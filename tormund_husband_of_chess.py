@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import random
 import sys
 
 
@@ -12,10 +13,10 @@ class State:
         if board is None:
             self.board = []
             self.board.append(['k', 'q', 'b', 'n', 'r'])
-            self.board.append(['.', '.', 'p', 'p', 'p'])
+            self.board.append(['p', 'p', 'p', 'p', 'p'])
             self.board.append(['.', '.', '.', '.', '.'])
-            self.board.append(['p', 'p', 'P', '.', '.'])
-            self.board.append(['.', '.', '.', '.', 'P'])
+            self.board.append(['.', '.', '.', '.', '.'])
+            self.board.append(['P', 'P', 'P', 'P', 'P'])
             self.board.append(['R', 'N', 'B', 'Q', 'K'])
             self.move = 'W'
             self.turn = 1
@@ -23,6 +24,8 @@ class State:
             self.board = board
         self.move = 'W' if move is None else move
         self.turn = 1 if turn is None else turn
+        self.moves = self.generate_all_moves()
+        self.moves_strings = [m.to_string() for m in self.moves]
 
     def print_state(self, verbose=False):
         print(self.move, self.turn)  # print who's move/ what turn
@@ -116,18 +119,54 @@ class State:
 
     def generate_all_moves(self):
         moves = []
-        move_strings = []
         pieces = self.get_pieces()
         for piece in pieces:
             moves += self.generate_moves_for_piece(piece)
-        move_strings += [m.to_string() for m in moves]
-        if move_strings:
-            move_strings.sort()
-        for m in move_strings:
-            print(m)
+        return moves
 
     def apply_move(self, move):
-        pass
+        piece = self.board[move.from_square.row][move.from_square.col]
+        new_board = [[val for val in row] for row in self.board]
+        new_board[move.from_square.row][move.from_square.col] = '.'
+        new_board[move.to_square.row][move.to_square.col] = piece
+        new_move = 'W' if self.move == 'B' else 'B'
+        new_turn = self.turn
+        new_turn += 1 if new_move == 'W' else 0
+        return State(new_board, new_move, new_turn)
+
+    def send_move(self, move):
+        def get_square_from_rank(rank):
+            assert len(rank) == 2
+            col = ord(rank[0]) - ord('a')
+            row = self.NUM_ROW - int(rank[1])
+            val = self.board[row][col]
+            return Square(row, col, val)
+        from_rank = move.split('-')[0]
+        to_rank = move.split('-')[1]
+        from_square = get_square_from_rank(from_rank)
+        to_square = get_square_from_rank(to_rank)
+        move = Move(from_square, to_square)
+        if move.to_string() in self.moves_strings:
+            return self.apply_move(move)
+        else:
+            raise Exception('invalid move')
+
+    def is_game_over(self):
+        if self.turn > 40:
+            return True
+        if self.moves.count == 0:
+            return True
+        b_king = False
+        w_king = False
+        for row in range(self.NUM_ROW):
+            for col in range(self.NUM_COL):
+                if self.board[row][col] == 'k':
+                    b_king = True
+                elif self.board[row][col] == 'K':
+                    w_king = True
+        if b_king is False or w_king is False:
+            return True
+        return False
 
 
 class Square:
@@ -188,5 +227,20 @@ if __name__ == '__main__':
         state = State(board, move, turn)
     else:
         state = State()
-    # state.print_state(verbose=True)
-    state.generate_all_moves()
+    print("you are player W")
+    while state.is_game_over() is False:
+        print('________________________')
+        state.print_state(verbose=True)
+        if state.move == 'W':
+            move = input("your move: ")
+            try:
+                state = state.send_move(move)
+            except:
+                print('invalid move, try again')
+                continue
+        else:
+            move = random.choice(state.moves)
+            print("computer's move: {}".format(move.to_string()))
+            state = state.apply_move(move)
+        print('________________________')
+    print('game over')
