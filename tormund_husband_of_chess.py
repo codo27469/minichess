@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import random
+# import random
 import sys
 
 
@@ -168,6 +168,33 @@ class State:
             return True
         return False
 
+    def value_of_state(self):
+        b_score = 0
+        w_score = 0
+        for row in range(self.NUM_ROW):
+            for col in range(self.NUM_COL):
+                val = self.board[row][col]
+                if val == 'p':
+                    b_score += 100
+                elif val == 'P':
+                    w_score += 100
+                elif val == 'b' or val == 'n':
+                    b_score += 300
+                elif val == 'B' or val == 'N':
+                    w_score += 300
+                elif val == 'r':
+                    b_score += 500
+                elif val == 'R':
+                    w_score += 500
+                elif val == 'q':
+                    b_score += 900
+                elif val == 'Q':
+                    w_score += 900
+        if self.move == 'W':
+            return w_score - b_score
+        else:
+            return b_score - w_score
+
 
 class Square:
     def __init__(self, row, col, val):
@@ -239,8 +266,21 @@ if __name__ == '__main__':
                 print('invalid move, try again')
                 continue
         else:
-            move = random.choice(state.moves)
-            print("computer's move: {}".format(move.to_string()))
-            state = state.apply_move(move)
-        print('________________________')
+            # move = random.choice(state.moves)
+            # print("computer's move: {}".format(move.to_string()))
+            # state = state.apply_move(move)
+            best_score = 10000
+            best_move = state.moves[0]
+            for move in state.moves[1:]:
+                potential_state = state.apply_move(move)
+                if potential_state.value_of_state() < best_score:
+                    best_score = potential_state.value_of_state()
+                    best_move = move
+            print("computer's move: {} (score: {})".format(
+                best_move.to_string(), best_score)
+            )
+            state = state.apply_move(best_move)
     print('game over')
+    loser = state.move  # the winning move went last, changes whos on turn
+    winner = 'B' if loser == 'W' else 'B'
+    print('{} loses, {} wins'.format(loser, winner))
