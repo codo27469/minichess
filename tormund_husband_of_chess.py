@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# import random
+import random
 import sys
 
 
@@ -8,6 +8,8 @@ class State:
     '''White is capital letters, black is lowercase. White moves first'''
     NUM_ROW = 6
     NUM_COL = 5
+    BLUE = '\033[94m'
+    ENDC = '\033[0m'
 
     def __init__(self, board=None, move=None, turn=None):
         if board is None:
@@ -34,12 +36,13 @@ class State:
             for col in range(self.NUM_COL):
                 print(self.board[row][col], end=' ')
             if verbose:
-                print('{} '.format(r_num))  # print what rows
+                print(self.BLUE + '{} '.format(r_num) + self.ENDC)
                 r_num -= 1
             else:
                 print('')
         if verbose:
-            [print(chr(ord('a') + i), end=' ') for i in range(0, 5)]
+            for i in range(0, 5):
+                print(self.BLUE + chr(ord('a') + i) + self.ENDC, end=' ')
             print('')
 
     def get_pieces(self):
@@ -243,17 +246,32 @@ class Move:
             print(self.to_string())
 
 
-if __name__ == '__main__':
-    if '-r' in sys.argv:
-        # read from stdin
-        input_lines = sys.stdin.readlines()
-        turn = input_lines[0].split()[0]
-        move = input_lines[0].split()[1]
-        board_lines = input_lines[1:]
-        board = [[val for val in line.strip()] for line in board_lines]
-        state = State(board, move, turn)
-    else:
-        state = State()
+def depth_limited_negamax(state, depth):
+    if state.is_game_over() or depth <= 0:
+        return state.value_of_state()
+    moves = state.generate_all_moves()
+    m = moves.pop(random.randint(0, len(moves) - 1))
+    p_state = state.apply_move(m)
+    p_val = -(depth_limited_negamax(p_state, depth - 1))
+    for mv in moves:
+        p_state = state.apply_move(mv)
+        val = -(depth_limited_negamax(p_state, depth - 1))
+        p_val = max(p_val, val)
+    return p_val
+
+
+def parse_input():
+    # read from stdin
+    input_lines = sys.stdin.readlines()
+    turn = input_lines[0].split()[0]
+    move = input_lines[0].split()[1]
+    board_lines = input_lines[1:]
+    board = [[val for val in line.strip()] for line in board_lines]
+    state = State(board, move, turn)
+    return state
+
+
+def human_player(state):
     print("you are player W")
     while state.is_game_over() is False:
         print('________________________')
@@ -266,15 +284,14 @@ if __name__ == '__main__':
                 print('invalid move, try again')
                 continue
         else:
-            # move = random.choice(state.moves)
-            # print("computer's move: {}".format(move.to_string()))
-            # state = state.apply_move(move)
             best_score = 10000
             best_move = state.moves[0]
             for move in state.moves[1:]:
                 potential_state = state.apply_move(move)
-                if potential_state.value_of_state() < best_score:
-                    best_score = potential_state.value_of_state()
+                d = 3  # for now
+                s = depth_limited_negamax(potential_state, d)
+                if s < best_score:
+                    best_score = s
                     best_move = move
             print("computer's move: {} (score: {})".format(
                 best_move.to_string(), best_score)
@@ -282,5 +299,19 @@ if __name__ == '__main__':
             state = state.apply_move(best_move)
     print('game over')
     loser = state.move  # the winning move went last, changes whos on turn
-    winner = 'B' if loser == 'W' else 'B'
+    winner = 'B' if loser == 'W' else 'W'
     print('{} loses, {} wins'.format(loser, winner))
+
+
+if __name__ == '__main__':
+    if '-r' in sys.argv:
+        state = parse_input()
+    else:
+        state = State()
+    if '-p' in sys.argv:
+        # play against human player
+        human_player(state)
+    else:
+        # print generated moves for state
+        for m in state.generate_all_moves():
+            print(m.to_string())
