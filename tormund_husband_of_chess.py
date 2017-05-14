@@ -128,14 +128,23 @@ class State:
         return moves
 
     def apply_move(self, move):
-        piece = self.board[move.from_square.row][move.from_square.col]
-        new_board = [[val for val in row] for row in self.board]
-        new_board[move.from_square.row][move.from_square.col] = '.'
-        new_board[move.to_square.row][move.to_square.col] = piece
-        new_move = 'W' if self.move == 'B' else 'B'
-        new_turn = self.turn
-        new_turn += 1 if new_move == 'W' else 0
-        return State(new_board, new_move, new_turn)
+        new_piece = self.board[move.from_square.row][move.from_square.col]
+        old_piece = self.board[move.to_square.row][move.to_square.col]
+        self.board[move.from_square.row][move.from_square.col] = '.'
+        self.board[move.to_square.row][move.to_square.col] = new_piece
+        self.move = 'W' if self.move == 'B' else 'B'
+        self.turn += 1 if self.move == 'W' else 0
+        self.moves = self.generate_all_moves()
+        self.moves_strings = [m.to_string() for m in self.moves]
+        return old_piece
+
+    def undo_move(self, move, piece):
+        self.board[move.from_square.row][move.from_square.col] = self.board[move.to_square.row][move.to_square.col]
+        self.board[move.to_square.row][move.to_square.col] = piece
+        self.move = 'W' if self.move == 'B' else 'B'
+        self.turn -= 1 if self.move == 'B' else 0
+        self.moves = self.generate_all_moves()
+        self.moves_strings = [m.to_string() for m in self.moves]
 
     def send_move(self, move):
         def get_square_from_rank(rank):
@@ -178,21 +187,21 @@ class State:
             for col in range(self.NUM_COL):
                 val = self.board[row][col]
                 if val == 'p':
-                    b_score += 100
+                    b_score += 1
                 elif val == 'P':
-                    w_score += 100
+                    w_score += 1
                 elif val == 'b' or val == 'n':
-                    b_score += 300
+                    b_score += 3
                 elif val == 'B' or val == 'N':
-                    w_score += 300
+                    w_score += 3
                 elif val == 'r':
-                    b_score += 500
+                    b_score += 5
                 elif val == 'R':
-                    w_score += 500
+                    w_score += 5
                 elif val == 'q':
-                    b_score += 900
+                    b_score += 9
                 elif val == 'Q':
-                    w_score += 900
+                    w_score += 9
         if self.move == 'W':
             return w_score - b_score
         else:
@@ -246,18 +255,55 @@ class Move:
             print(self.to_string())
 
 
-def depth_limited_negamax(state, depth):
+def sorted_moves_from(state, val):
+    M = []
+    piece_value = {
+        '.': 0,
+        'p': 1, 'P': 1,
+        'b': 3, 'B': 3, 'n': 3, 'N': 3,
+        'r': 5, 'R': 5,
+        'q': 9, 'Q': 9
+    }
+    for m in state.moves:
+        p = state.apply_move(m)
+        if p == 'k' or p == 'K':
+            v0 = -26
+        else:
+            v0 = val - piece_value[p]
+        M.append({'move': m, 'value': v0})
+        state.undo_move(m, p)
+    random.shuffle(M)
+    sorted_list = sorted(M, key=lambda k: k['value'])
+    # print([m['value'] for m in sorted_list])
+    return [m['move'] for m in sorted_list]
+
+
+def depth_limited_negamax(state, depth, alpha, beta, value):
+    piece_value = {
+        '.': 0,
+        'p': 1, 'P': 1,
+        'b': 3, 'B': 3, 'n': 3, 'N': 3,
+        'r': 5, 'R': 5,
+        'q': 9, 'Q': 9
+    }
+
     if state.is_game_over() or depth <= 0:
-        return state.value_of_state()
-    moves = state.generate_all_moves()
-    m = moves.pop(random.randint(0, len(moves) - 1))
-    p_state = state.apply_move(m)
-    p_val = -(depth_limited_negamax(p_state, depth - 1))
-    for mv in moves:
-        p_state = state.apply_move(mv)
-        val = -(depth_limited_negamax(p_state, depth - 1))
-        p_val = max(p_val, val)
-    return p_val
+        return value
+    moves = sorted_moves_from(state, value)
+    v = -26
+    a0 = alpha
+    for m in moves:
+        p = state.apply_move(m)
+        if p == 'k' or p == 'K':
+            v0 = -26
+        else:
+            v0 = value - piece_value[p]
+        v = max(v, -(depth_limited_negamax(state, depth - 1, -beta, -a0, v0)))
+        a0 = max(a0, v)
+        state.undo_move(m, p)
+        if v >= beta:
+            return beta
+    return v
 
 
 def parse_input():
@@ -271,6 +317,24 @@ def parse_input():
     return state
 
 
+def get_best_move_for_state(state):
+    best_score = 26
+    best_move = state.moves[0]
+    for move in state.moves:
+        p = state.apply_move(move)
+        d = 4  # for now
+        a = -26
+        b = 26
+        v = state.value_of_state()
+        s = depth_limited_negamax(state, d, a, b, v)
+        if s < best_score:
+            best_score = s
+            best_move = move
+        state.undo_move(move, p)
+    state.apply_move(best_move)
+    return best_move.to_string()
+
+
 def human_player(state):
     print("you are player W")
     while state.is_game_over() is False:
@@ -279,24 +343,31 @@ def human_player(state):
         if state.move == 'W':
             move = input("your move: ")
             try:
-                state = state.send_move(move)
+                if move == 'pieces':
+                    [print(m.to_string()) for m in state.moves]
+                else:
+                    state.send_move(move)
             except:
                 print('invalid move, try again')
                 continue
         else:
-            best_score = 10000
+            best_score = 26
             best_move = state.moves[0]
-            for move in state.moves[1:]:
-                potential_state = state.apply_move(move)
-                d = 3  # for now
-                s = depth_limited_negamax(potential_state, d)
+            for move in state.moves:
+                p = state.apply_move(move)
+                d = 4  # for now
+                a = -26
+                b = 26
+                v = state.value_of_state()
+                s = depth_limited_negamax(state, d, a, b, v)
                 if s < best_score:
                     best_score = s
                     best_move = move
+                state.undo_move(move, p)
             print("computer's move: {} (score: {})".format(
                 best_move.to_string(), best_score)
             )
-            state = state.apply_move(best_move)
+            state.apply_move(best_move)
     print('game over')
     loser = state.move  # the winning move went last, changes whos on turn
     winner = 'B' if loser == 'W' else 'W'
@@ -312,6 +383,7 @@ if __name__ == '__main__':
         # play against human player
         human_player(state)
     else:
+        pass
         # print generated moves for state
-        for m in state.generate_all_moves():
-            print(m.to_string())
+        # for m in state.generate_all_moves():
+        #    print(m.to_string())
