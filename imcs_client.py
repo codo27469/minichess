@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# This script is heavily inspired by Max Goodman's 'skirmish.py'.
+# https://github.com/chromakode/skirmish/tree/master
+
+# The functions that log into, and interact with, the imcs server are taken
+# from that source. I used only what I needed to send moves to and from my
+# player and modified some things accordingly. The main script is heavily
+# simplified to only offer or accept games from a given user on imcs.
+# ~Thank you Max
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import socket
 import sys
 from tormund_husband_of_chess import State
@@ -137,7 +148,7 @@ if __name__ == '__main__':
         client.offer('W')
         state = client.get_board()
         while state is not None:
-            m = state.apply_alpha_beta(6, 3000)
+            m = state.apply_alpha_beta(8, 3000)
             print('making move: {}'.format(m.to_string()))
             client.send_move(m.to_string())
             state = client.get_board()
@@ -150,9 +161,10 @@ if __name__ == '__main__':
                 client.accept(g[0])
                 state = client.get_board()
                 while state is not None:
-                    m = state.apply_alpha_beta(6, 3000)
+                    m = state.apply_alpha_beta(8, 3000)
                     print('making move: {}'.format(m.to_string()))
                     client.send_move(m.to_string())
                     state = client.get_board()
                 print(client.winner)
+                break
     client.logout()

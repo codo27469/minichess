@@ -39,9 +39,17 @@ class State:
         self.moves_strings = [m.to_string() for m in self.moves]
 
         # used for do-undo
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # the idea of this kind of do-undo came from
+        # this repo: https://github.com/sorgtyler/minichess
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         self.previous_states = []
 
         # used for iterative deepening
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # the idea of using these variables and the time module came from
+        # this repo: https://github.com/sorgtyler/minichess
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         self.time_spent = 0
         self.time_counter = 0
         self.time_limit = 0  # per move
@@ -258,6 +266,11 @@ class State:
                     )
         return [move[1] for move in sorted_moves]
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # idea of how to apply negamax/alpha beta search to a given state came
+    # this repo: https://github.com/sorgtyler/minichess
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     def negamax(self, depth):
         # check the time for iterative deepening
         self.time_counter += 1
@@ -424,7 +437,8 @@ def human_player(state):
                 continue
         else:
             if '--alpha-beta' in sys.argv:
-                move = state.apply_alpha_beta(6, 3000)
+                print('alpha-beta')
+                move = state.apply_alpha_beta(8, 3000)
             elif '--negamax' in sys.argv:
                 move = state.apply_negamax(4, 3000)
             else:  # only look at the states of the next move, ie easy-2-beat
