@@ -2,7 +2,7 @@
 
 import socket
 import sys
-from tormund_husband_of_chess import State, get_best_move_for_state
+from tormund_husband_of_chess import State
 
 
 class Conversation:
@@ -17,6 +17,7 @@ class Conversation:
         return self.in_stream.readline()
 
     def receive_until(self, codes):
+        msg = resp = code = linelist = None
         lines = ''
         while True:
             line = self.receive_line()
@@ -94,6 +95,10 @@ class Client:
         self.io.send_line('accept {}'.format(id))
         code, msg, resp = self.io.expect(['105', '106', '408'])
         if code in ['105', '106']:
+            if code == '105':
+                print('you are color W')
+            else:
+                print('you are color B')
             print('accepted game: {}'.format(id))
 
     def offer(self, color):
@@ -107,7 +112,10 @@ class Client:
     def get_board(self):
         code, msg, resp, text = self.io.receive_until(['?', '='])
         if code[0] == '=':  # the game has ended
-            self.winner = msg + resp + text
+            if '= draw' in text:
+                self.winner = 'draw game'
+            else:
+                self.winner = msg
             return None
         if str(text[0]).startswith('!'):  # first line is oppenent's last move
             text = text[1:]
@@ -129,23 +137,22 @@ if __name__ == '__main__':
         client.offer('W')
         state = client.get_board()
         while state is not None:
-            m = get_best_move_for_state(state)
-            print('making move: {}'.format(m))
-            client.send_move(m)
+            m = state.apply_alpha_beta(6, 3000)
+            print('making move: {}'.format(m.to_string()))
+            client.send_move(m.to_string())
             state = client.get_board()
         print(client.winner)
     elif '-p' in sys.argv:
-        # play a game with yourself
+        user = sys.argv[2]  # the user you want to play against
         games = client.list_games()
         for g in games:
-            print(g[1])
-            if g[1] == client.user:  # game is being offered by you!
+            if g[1] == user:
                 client.accept(g[0])
                 state = client.get_board()
                 while state is not None:
-                    m = get_best_move_for_state(state)
-                    print('making move: {}'.format(m))
-                    client.send_move(m)
+                    m = state.apply_alpha_beta(6, 3000)
+                    print('making move: {}'.format(m.to_string()))
+                    client.send_move(m.to_string())
                     state = client.get_board()
                 print(client.winner)
     client.logout()

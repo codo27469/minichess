@@ -2,6 +2,7 @@
 
 import random
 import sys
+import time
 
 
 class State:
@@ -12,6 +13,7 @@ class State:
     ENDC = '\033[0m'
 
     def __init__(self, board=None, move=None, turn=None):
+        # basic state
         if board is None:
             self.board = []
             self.board.append(['k', 'q', 'b', 'n', 'r'])
@@ -26,8 +28,35 @@ class State:
             self.board = board
         self.move = 'W' if move is None else move
         self.turn = 1 if turn is None else turn
+
+        # used for state evaluation
+        self.update_pieces_list()
+        self.piece_values = {
+            'k': 200, 'q': 9, 'r': 5, 'b': 3, 'n': 3, 'p': 1,
+            'K': 200, 'Q': 9, 'R': 5, 'B': 3, 'N': 3, 'P': 1
+        }
         self.moves = self.generate_all_moves()
         self.moves_strings = [m.to_string() for m in self.moves]
+
+        # used for do-undo
+        self.previous_states = []
+
+        # used for iterative deepening
+        self.time_spent = 0
+        self.time_counter = 0
+        self.time_limit = 0  # per move
+
+    def update_pieces_list(self):
+        ''' Update the list of black + white pieces for the current board'''
+        self.black_pieces = []
+        self.white_pieces = []
+        for row in range(self.NUM_ROW):
+            for col in range(self.NUM_COL):
+                piece = self.board[row][col]
+                if piece.isupper():
+                    self.white_pieces.append(piece)
+                elif piece.islower():
+                    self.black_pieces.append(piece)
 
     def print_state(self, verbose=False):
         print(self.move, self.turn)  # print who's move/ what turn
@@ -128,23 +157,44 @@ class State:
         return moves
 
     def apply_move(self, move):
-        new_piece = self.board[move.from_square.row][move.from_square.col]
-        old_piece = self.board[move.to_square.row][move.to_square.col]
-        self.board[move.from_square.row][move.from_square.col] = '.'
-        self.board[move.to_square.row][move.to_square.col] = new_piece
-        self.move = 'W' if self.move == 'B' else 'B'
+        # save current state for undo
+        self.previous_states.append(
+            [[val for val in row] for row in self.board]
+        )
+        from_square = move.from_square
+        to_square = move.to_square
+        piece = self.board[from_square.row][from_square.col]
+        dest = self.board[to_square.row][to_square.col]
+        # move the piece to the dest
+        self.board[from_square.row][from_square.col] = '.'
+        self.board[to_square.row][to_square.col] = piece
+        # update piece list if something was taken
+        if dest != '.' and dest.islower():  # black piece
+            self.black_pieces.remove(dest)
+        elif dest != '.' and dest.isupper():  # white piece
+            self.white_pieces.remove(dest)
+        # handle pawn promotion
+        if piece == 'p' and to_square.row == self.NUM_ROW - 1:
+            # promote black
+            self.board[to_square.row][to_square.col] = 'q'
+            self.black_pieces.remove('p')
+            self.black_pieces.append('q')
+        elif piece == 'P' and to_square.row == 0:
+            # promote white
+            self.board[to_square.row][to_square.col] = 'Q'
+            self.white_pieces.remove('P')
+            self.white_pieces.append('Q')
+        # change turns
+        self.move = 'B' if self.move == 'W' else 'W'
         self.turn += 1 if self.move == 'W' else 0
-        self.moves = self.generate_all_moves()
-        self.moves_strings = [m.to_string() for m in self.moves]
-        return old_piece
 
-    def undo_move(self, move, piece):
-        self.board[move.from_square.row][move.from_square.col] = self.board[move.to_square.row][move.to_square.col]
-        self.board[move.to_square.row][move.to_square.col] = piece
-        self.move = 'W' if self.move == 'B' else 'B'
-        self.turn -= 1 if self.move == 'B' else 0
-        self.moves = self.generate_all_moves()
-        self.moves_strings = [m.to_string() for m in self.moves]
+    def undo_move(self):
+        if len(self.previous_states) > 0:
+            # restore the previous state
+            self.board = self.previous_states.pop()
+            self.turn -= 1 if self.move == 'W' else 0
+            self.move = 'B' if self.move == 'W' else 'W'
+            self.update_pieces_list()
 
     def send_move(self, move):
         def get_square_from_rank(rank):
@@ -158,16 +208,13 @@ class State:
         from_square = get_square_from_rank(from_rank)
         to_square = get_square_from_rank(to_rank)
         move = Move(from_square, to_square)
-        if move.to_string() in self.moves_strings:
+        m_strings = [m.to_string() for m in self.generate_all_moves()]
+        if move.to_string() in m_strings:
             return self.apply_move(move)
         else:
             raise Exception('invalid move')
 
-    def is_game_over(self):
-        if self.turn > 40:
-            return True
-        if self.moves.count == 0:
-            return True
+    def winner(self):
         b_king = False
         w_king = False
         for row in range(self.NUM_ROW):
@@ -176,57 +223,151 @@ class State:
                     b_king = True
                 elif self.board[row][col] == 'K':
                     w_king = True
-        if b_king is False or w_king is False:
-            return True
-        return False
+        if b_king and w_king and self.turn <= 40:
+            return '?'  # game is still going
+        elif b_king and w_king and self.turn > 40:
+            return '='  # game has drawn
+        elif not b_king and w_king:
+            return 'W'  # white wins
+        elif b_king and not w_king:
+            return 'B'  # black wins
+        elif not b_king and not w_king:
+            return '='
 
-    def value_of_state(self):
-        b_score = 0
-        w_score = 0
-        for row in range(self.NUM_ROW):
-            for col in range(self.NUM_COL):
-                val = self.board[row][col]
-                if val == 'p':
-                    b_score += 1
-                elif val == 'P':
-                    w_score += 1
-                elif val == 'b' or val == 'n':
-                    b_score += 3
-                elif val == 'B' or val == 'N':
-                    w_score += 3
-                elif val == 'r':
-                    b_score += 5
-                elif val == 'R':
-                    w_score += 5
-                elif val == 'q':
-                    b_score += 9
-                elif val == 'Q':
-                    w_score += 9
-        if self.move == 'W':
-            return w_score - b_score
-        else:
-            return b_score - w_score
+    def evaluate(self):
+        player = 1 if self.move == 'W' else -1
+        w_score = sum([self.piece_values[piece] for piece in self.white_pieces])
+        b_score = sum([self.piece_values[piece] for piece in self.black_pieces])
+        return (w_score - b_score) * player
+
+    def sorted_moves(self):
+        moves = self.generate_all_moves()
+        random.shuffle(moves)
+        evaluated_moves = []
+        for move in moves:
+            self.apply_move(move)
+            score = self.evaluate()
+            self.undo_move()
+            evaluated_moves.append([score, move])
+        sorted_moves = []
+        while len(evaluated_moves) > 0:
+            for m in evaluated_moves:
+                if m[0] == min([e[0] for e in evaluated_moves]):
+                    sorted_moves.append(
+                        evaluated_moves.pop(evaluated_moves.index(m))
+                    )
+        return [move[1] for move in sorted_moves]
+
+    def negamax(self, depth):
+        # check the time for iterative deepening
+        self.time_counter += 1
+        if self.time_counter > 1000:
+            self.time_counter = 0
+            self.time_spent = int(time.time() * 1000)
+        if self.time_spent > self.time_limit:
+            return 0
+        if depth <= 0 or self.winner() != '?':
+            return self.evaluate()
+        score = float('-inf')
+        moves = self.sorted_moves()
+        for move in moves:
+            self.apply_move(move)
+            score = max(score, -self.negamax(depth - 1))
+            self.undo_move()
+        return score
+
+    def apply_negamax(self, depth, duration):
+        # iterative deepening
+        self.time_spent = int(time.time() * 1000)
+        self.time_limit = int(self.time_spent + duration)
+        self.time_counter = 0
+
+        moves = self.sorted_moves()
+        best_move = ''
+        for d in range(1, depth + 1):
+            score = float('-inf')
+            candidate = ''
+            for move in moves:
+                self.apply_move(move)
+                temp = -self.negamax(d - 1)
+                self.undo_move()
+                if temp > score:
+                    candidate = move
+                    score = temp
+            if self.time_spent > self.time_limit:
+                break
+            best_move = candidate
+        if best_move == '':
+            best_move = moves[random.randint(0, len(moves) - 1)]
+            print('ran out of time, making random move')
+        return best_move
+
+    def alpha_beta(self, depth, alpha, beta):
+        # iterative deepening
+        self.time_counter += 1
+        if self.time_counter > 1000:
+            self.time_counter = 0
+            self.time_spent = int(time.time() * 1000)
+        if self.time_spent > self.time_limit:
+            return 0
+        if depth <= 0 or self.winner() != '?':
+            return self.evaluate()
+        score = float('-inf')
+        for move in self.sorted_moves():
+            self.apply_move(move)
+            score = max(score, -self.alpha_beta(depth - 1, -beta, -alpha))
+            self.undo_move()
+            alpha = max(alpha, score)
+            if alpha >= beta:
+                break
+        return score
+
+    def apply_alpha_beta(self, depth, duration):
+        self.time_spent = int(time.time() * 1000)
+        self.time_limit = int(self.time_spent + duration)
+        self.time_counter = 0
+        best_move = ''
+        moves = self.sorted_moves()
+        for d in range(1, depth + 1):
+            alpha = float('-inf')
+            beta = float('inf')
+            candidate = ''
+            for move in moves:
+                self.apply_move(move)
+                temp = -self.alpha_beta(d - 1, -beta, -alpha)
+                self.undo_move()
+                if temp > alpha:
+                    candidate = move
+                    alpha = temp
+            if self.time_spent > self.time_limit:
+                break
+            best_move = candidate
+        if best_move == '':
+            best_move = moves[random.randint(0, len(moves) - 1)]
+            print('ran out of time, making random move')
+        return best_move
 
 
 class Square:
+    PIECE_NAMES = {
+        'p': 'pawn', 'n': 'knight', 'b': 'bishop', 'r': 'rook', 'q': 'queen',
+        'P': 'pawn', 'N': 'knight', 'B': 'bishop', 'R': 'rook', 'Q': 'queen',
+        'k': 'king', 'K': 'king', '.': 'empty'
+    }
+
     def __init__(self, row, col, val):
         assert row <= 5 and row >= 0
         assert col <= 4 and col >= 0
         self.row = row
         self.col = col
         self.val = val
-        if val == 'p' or val == 'P':
-            self.name = 'pawn'
-        elif val == 'n' or val == 'N':
-            self.name = 'knight'
-        elif val == 'b' or val == 'B':
-            self.name = 'bishop'
-        elif val == 'r' or val == 'R':
-            self.name = 'rook'
-        elif val == 'q' or val == 'Q':
-            self.name = 'queen'
-        elif val == 'k' or val == 'K':
-            self.name = 'king'
+        self.name = self.PIECE_NAMES[val]
+
+    def __eq__(self, other):
+        if self.row == other.row and self.col == other.col:
+            if self.val == other.val:
+                return True
+        return False
 
     def to_string(self):
         return '{} (row: {}, col: {})'.format(self.val, self.row, self.col)
@@ -255,57 +396,6 @@ class Move:
             print(self.to_string())
 
 
-def sorted_moves_from(state, val):
-    M = []
-    piece_value = {
-        '.': 0,
-        'p': 1, 'P': 1,
-        'b': 3, 'B': 3, 'n': 3, 'N': 3,
-        'r': 5, 'R': 5,
-        'q': 9, 'Q': 9
-    }
-    for m in state.moves:
-        p = state.apply_move(m)
-        if p == 'k' or p == 'K':
-            v0 = -26
-        else:
-            v0 = val - piece_value[p]
-        M.append({'move': m, 'value': v0})
-        state.undo_move(m, p)
-    random.shuffle(M)
-    sorted_list = sorted(M, key=lambda k: k['value'])
-    # print([m['value'] for m in sorted_list])
-    return [m['move'] for m in sorted_list]
-
-
-def depth_limited_negamax(state, depth, alpha, beta, value):
-    piece_value = {
-        '.': 0,
-        'p': 1, 'P': 1,
-        'b': 3, 'B': 3, 'n': 3, 'N': 3,
-        'r': 5, 'R': 5,
-        'q': 9, 'Q': 9
-    }
-
-    if state.is_game_over() or depth <= 0:
-        return value
-    moves = sorted_moves_from(state, value)
-    v = -26
-    a0 = alpha
-    for m in moves:
-        p = state.apply_move(m)
-        if p == 'k' or p == 'K':
-            v0 = -26
-        else:
-            v0 = value - piece_value[p]
-        v = max(v, -(depth_limited_negamax(state, depth - 1, -beta, -a0, v0)))
-        a0 = max(a0, v)
-        state.undo_move(m, p)
-        if v >= beta:
-            return beta
-    return v
-
-
 def parse_input():
     # read from stdin
     input_lines = sys.stdin.readlines()
@@ -317,61 +407,35 @@ def parse_input():
     return state
 
 
-def get_best_move_for_state(state):
-    best_score = 26
-    best_move = state.moves[0]
-    for move in state.moves:
-        p = state.apply_move(move)
-        d = 4  # for now
-        a = -26
-        b = 26
-        v = state.value_of_state()
-        s = depth_limited_negamax(state, d, a, b, v)
-        if s < best_score:
-            best_score = s
-            best_move = move
-        state.undo_move(move, p)
-    state.apply_move(best_move)
-    return best_move.to_string()
-
-
 def human_player(state):
-    print("you are player W")
-    while state.is_game_over() is False:
+    print("you are player W, tormund (husband of chess) is B")
+    while state.winner() == '?':
         print('________________________')
         state.print_state(verbose=True)
         if state.move == 'W':
             move = input("your move: ")
             try:
-                if move == 'pieces':
-                    [print(m.to_string()) for m in state.moves]
+                if move == 'moves':
+                    [print(m.to_string()) for m in state.generate_all_moves()]
                 else:
                     state.send_move(move)
             except:
                 print('invalid move, try again')
                 continue
         else:
-            best_score = 26
-            best_move = state.moves[0]
-            for move in state.moves:
-                p = state.apply_move(move)
-                d = 4  # for now
-                a = -26
-                b = 26
-                v = state.value_of_state()
-                s = depth_limited_negamax(state, d, a, b, v)
-                if s < best_score:
-                    best_score = s
-                    best_move = move
-                state.undo_move(move, p)
-            print("computer's move: {} (score: {})".format(
-                best_move.to_string(), best_score)
-            )
-            state.apply_move(best_move)
+            if '--alpha-beta' in sys.argv:
+                move = state.apply_alpha_beta(6, 3000)
+            elif '--negamax' in sys.argv:
+                move = state.apply_negamax(4, 3000)
+            else:  # only look at the states of the next move, ie easy-2-beat
+                move = state.sorted_moves()[0]
+            print('making move {}'.format(move.to_string()))
+            state.apply_move(move)
     print('game over')
     loser = state.move  # the winning move went last, changes whos on turn
     winner = 'B' if loser == 'W' else 'W'
     print('{} loses, {} wins'.format(loser, winner))
+    state.print_state(verbose=True)
 
 
 if __name__ == '__main__':
@@ -385,5 +449,5 @@ if __name__ == '__main__':
     else:
         pass
         # print generated moves for state
-        # for m in state.generate_all_moves():
-        #    print(m.to_string())
+        for m in state.generate_all_moves():
+            print(m.to_string())
