@@ -32,8 +32,8 @@ class State:
         # used for state evaluation
         self.update_pieces_list()
         self.piece_values = {
-            'k': 200, 'q': 9, 'r': 6, 'b': 5, 'n': 4, 'p': 1,
-            'K': 200, 'Q': 9, 'R': 6, 'B': 5, 'N': 4, 'P': 1
+            'k': 200, 'q': 9, 'r': 5, 'b': 3, 'n': 3, 'p': 1,
+            'K': 200, 'Q': 9, 'R': 5, 'B': 3, 'N': 3, 'P': 1
         }
         self.moves = self.generate_all_moves()
         self.moves_strings = [m.to_string() for m in self.moves]
@@ -263,7 +263,7 @@ class State:
         player = 1 if self.move == 'W' else -1
         w_score = sum([self.piece_values[piece] for piece in self.white_pieces])
         b_score = sum([self.piece_values[piece] for piece in self.black_pieces])
-        material_score = ((w_score - b_score) * player) * 50
+        material_score = ((w_score - b_score) * player) * 100
         dev_w = dev_b = 0  # how advanced are the pieces?
         for row in range(self.NUM_ROW):
             for col in range(self.NUM_COL):
@@ -272,11 +272,11 @@ class State:
                     dev_w += self.NUM_ROW - row
                 elif piece == 'p':
                     dev_b += row
-                elif piece in ['N', 'B', 'R'] and row != 0:
+                elif piece in ['N', 'B', 'R', 'Q'] and row != self.NUM_ROW - 1:
                     dev_w += 5
-                elif piece in ['n', 'b', 'r'] and row != self.NUM_ROW - 1:
+                elif piece in ['n', 'b', 'r', 'q'] and row != 0:
                     dev_b += 5
-        developed_score = (dev_w - dev_b) * player
+        developed_score = (dev_w * player) if self.move == 'W' else (dev_b * player)
         return material_score + developed_score
 
     def sorted_moves(self):
@@ -343,8 +343,8 @@ class State:
                 break
             best_move = candidate
         if best_move == '':
-            best_move = moves[random.randint(0, len(moves) - 1)]
-            print('ran out of time, making random move')
+            best_move = moves[0]
+            print('ran out of time, making best guess for move')
         return best_move
 
     def alpha_beta(self, depth, alpha, beta):
@@ -389,8 +389,8 @@ class State:
                 break
             best_move = candidate
         if best_move == '':
-            best_move = moves[random.randint(0, len(moves) - 1)]
-            print('ran out of time, making random move')
+            best_move = moves[0]
+            print('ran out of time, making best guess for move')
         return best_move
 
 
