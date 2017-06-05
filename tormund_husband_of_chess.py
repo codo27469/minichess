@@ -285,7 +285,6 @@ class State:
         evaluated_moves = []
         for move in moves:
             self.apply_move(move)
-            # score = self.evaluate()
             score = self.better_evaluate()
             self.undo_move()
             evaluated_moves.append([score, move])
@@ -356,7 +355,7 @@ class State:
         if self.time_spent > self.time_limit:
             return 0
         if depth <= 0 or self.winner() != '?':
-            return self.evaluate()
+            return self.better_evaluate()
         score = float('-inf')
         for move in self.sorted_moves():
             self.apply_move(move)
