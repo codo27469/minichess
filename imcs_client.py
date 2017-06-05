@@ -141,7 +141,9 @@ class Client:
 
 
 if __name__ == '__main__':
-    client = Client('imcs.svcs.cs.pdx.edu', 3589, 'tormund', 'amarant')
+    user = sys.argv[1]
+    password = sys.argv[2]
+    client = Client('imcs.svcs.cs.pdx.edu', 3589, user, password)
     client.login()
     if '-o' in sys.argv:
         # offer and play a game
@@ -154,7 +156,7 @@ if __name__ == '__main__':
             state = client.get_board()
         print(client.winner)
     elif '-p' in sys.argv:
-        user = sys.argv[2]  # the user you want to play against
+        user = sys.argv[4]  # the user you want to play against
         games = client.list_games()
         for g in games:
             if g[1] == user:
