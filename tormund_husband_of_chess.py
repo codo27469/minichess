@@ -32,17 +32,12 @@ class State:
         # used for state evaluation
         self.update_pieces_list()
         self.piece_values = {
-            'k': 200, 'q': 9, 'r': 5, 'b': 3, 'n': 3, 'p': 1,
-            'K': 200, 'Q': 9, 'R': 5, 'B': 3, 'N': 3, 'P': 1
+            'k': 200, 'q': 9, 'r': 6, 'b': 5, 'n': 4, 'p': 1,
+            'K': 200, 'Q': 9, 'R': 6, 'B': 5, 'N': 4, 'P': 1
         }
         self.moves = self.generate_all_moves()
         self.moves_strings = [m.to_string() for m in self.moves]
 
-        # used for do-undo
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # the idea of this kind of do-undo came from
-        # this repo: https://github.com/sorgtyler/minichess
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         self.previous_states = []
 
         # used for iterative deepening
@@ -165,14 +160,12 @@ class State:
         return moves
 
     def apply_move(self, move):
-        # save current state for undo
-        self.previous_states.append(
-            [[val for val in row] for row in self.board]
-        )
         from_square = move.from_square
         to_square = move.to_square
         piece = self.board[from_square.row][from_square.col]
         dest = self.board[to_square.row][to_square.col]
+        # save move + pieces for undo
+        self.previous_states.append((move, piece, dest))
         # move the piece to the dest
         self.board[from_square.row][from_square.col] = '.'
         self.board[to_square.row][to_square.col] = piece
@@ -198,11 +191,29 @@ class State:
 
     def undo_move(self):
         if len(self.previous_states) > 0:
-            # restore the previous state
-            self.board = self.previous_states.pop()
+            info = self.previous_states.pop()
+            move = info[0]
+            piece = info[1]
+            dest = info[2]
+            from_square = move.from_square
+            to_square = move.to_square
+            # unmake move
+            self.board[from_square.row][from_square.col] = piece
+            self.board[to_square.row][to_square.col] = dest
+            # put pieces back in their list if they were taken
+            if dest != '.' and dest.islower():
+                self.black_pieces.append(dest)
+            elif dest != '.' and dest.isupper():
+                self.white_pieces.append(dest)
+            # de-promote pawns
+            if piece == 'p' and to_square.row == self.NUM_ROW - 1:
+                self.black_pieces.append('p')
+                self.black_pieces.remove('q')
+            elif piece == 'P' and to_square.row == 0:
+                self.white_pieces.append('P')
+                self.white_pieces.remove('Q')
             self.turn -= 1 if self.move == 'W' else 0
             self.move = 'B' if self.move == 'W' else 'W'
-            self.update_pieces_list()
 
     def send_move(self, move):
         def get_square_from_rank(rank):
@@ -248,13 +259,34 @@ class State:
         b_score = sum([self.piece_values[piece] for piece in self.black_pieces])
         return (w_score - b_score) * player
 
+    def better_evaluate(self):
+        player = 1 if self.move == 'W' else -1
+        w_score = sum([self.piece_values[piece] for piece in self.white_pieces])
+        b_score = sum([self.piece_values[piece] for piece in self.black_pieces])
+        material_score = ((w_score - b_score) * player) * 50
+        dev_w = dev_b = 0  # how advanced are the pieces?
+        for row in range(self.NUM_ROW):
+            for col in range(self.NUM_COL):
+                piece = self.board[row][col]
+                if piece == 'P':
+                    dev_w += self.NUM_ROW - row
+                elif piece == 'p':
+                    dev_b += row
+                elif piece in ['N', 'B', 'R'] and row != 0:
+                    dev_w += 5
+                elif piece in ['n', 'b', 'r'] and row != self.NUM_ROW - 1:
+                    dev_b += 5
+        developed_score = (dev_w - dev_b) * player
+        return material_score + developed_score
+
     def sorted_moves(self):
         moves = self.generate_all_moves()
         random.shuffle(moves)
         evaluated_moves = []
         for move in moves:
             self.apply_move(move)
-            score = self.evaluate()
+            # score = self.evaluate()
+            score = self.better_evaluate()
             self.undo_move()
             evaluated_moves.append([score, move])
         sorted_moves = []
@@ -353,6 +385,7 @@ class State:
                     candidate = move
                     alpha = temp
             if self.time_spent > self.time_limit:
+                print('ran out of time at depth: {}'.format(d))
                 break
             best_move = candidate
         if best_move == '':
