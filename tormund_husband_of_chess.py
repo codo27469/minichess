@@ -287,14 +287,8 @@ class State:
             self.apply_move(move)
             score = self.better_evaluate()
             self.undo_move()
-            evaluated_moves.append([score, move])
-        sorted_moves = []
-        while len(evaluated_moves) > 0:
-            for m in evaluated_moves:
-                if m[0] == min([e[0] for e in evaluated_moves]):
-                    sorted_moves.append(
-                        evaluated_moves.pop(evaluated_moves.index(m))
-                    )
+            evaluated_moves.append((score, move))
+        sorted_moves = sorted(evaluated_moves, key=lambda x: x[0])
         return [move[1] for move in sorted_moves]
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
