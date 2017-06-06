@@ -268,15 +268,22 @@ class State:
         for row in range(self.NUM_ROW):
             for col in range(self.NUM_COL):
                 piece = self.board[row][col]
+                if piece != '.':
+                    # check for pieces near the center
+                    if row > 2 and row < 5 and col > 0 and col < 4:
+                        if piece.isupper():
+                            dev_w += 1
+                        else:
+                            dev_b += 1
                 if piece == 'P':
                     dev_w += self.NUM_ROW - row
                 elif piece == 'p':
                     dev_b += row
-                elif piece in ['N', 'B', 'R', 'Q'] and row != self.NUM_ROW - 1:
-                    dev_w += 5
-                elif piece in ['n', 'b', 'r', 'q'] and row != 0:
-                    dev_b += 5
-        developed_score = (dev_w * player) if self.move == 'W' else (dev_b * player)
+                elif piece in ['N', 'B', 'R'] and row != self.NUM_ROW - 1:
+                    dev_w += 1
+                elif piece in ['n', 'b', 'r'] and row != 0:
+                    dev_b += 1
+        developed_score = (dev_w - dev_b) * player
         return material_score + developed_score
 
     def sorted_moves(self):
@@ -365,25 +372,30 @@ class State:
         self.time_limit = int(self.time_spent + duration)
         self.time_counter = 0
         best_move = ''
+        best_score = 0
         moves = self.sorted_moves()
         for d in range(1, depth + 1):
             alpha = float('-inf')
             beta = float('inf')
             candidate = ''
+            candidate_score = float('-inf')
             for move in moves:
                 self.apply_move(move)
                 temp = -self.alpha_beta(d - 1, -beta, -alpha)
                 self.undo_move()
                 if temp > alpha:
                     candidate = move
+                    candidate_score = temp
                     alpha = temp
             if self.time_spent > self.time_limit:
                 print('ran out of time at depth: {}'.format(d))
                 break
             best_move = candidate
+            best_score = candidate_score
         if best_move == '':
             best_move = moves[0]
             print('ran out of time, making best guess for move')
+        print('best score found: {}'.format(best_score))
         return best_move
 
 

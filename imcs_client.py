@@ -147,9 +147,10 @@ if __name__ == '__main__':
     client.login()
     if '-o' in sys.argv:
         # offer and play a game
-        client.offer('')
+        client.offer('W')
         state = client.get_board()
         while state is not None:
+            print('{} {}'.format(state.turn, state.move))
             m = state.apply_alpha_beta(8, 7000)
             print('making move: {}'.format(m.to_string()))
             client.send_move(m.to_string())
@@ -163,6 +164,7 @@ if __name__ == '__main__':
                 client.accept(g[0])
                 state = client.get_board()
                 while state is not None:
+                    print('{} {}'.format(state.turn, state.move))
                     m = state.apply_alpha_beta(8, 7000)
                     print('making move: {}'.format(m.to_string()))
                     client.send_move(m.to_string())
